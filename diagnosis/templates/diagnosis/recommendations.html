@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="text-center">Doctor Recommendations</h1>
+
+    {% if error %}
+        <div class="alert alert-danger" role="alert">
+            {{ error }}
+        </div>
+    {% else %}
+        <div class="mb-4">
+            <h4>Your Diagnosis:</h4>
+            <p>{{ diagnosis }}</p>
+        </div>
+
+        <h4>Recommended Doctors:</h4>
+        {% if recommended_doctors %}
+            <ul class="list-group">
+                {% for doctor in recommended_doctors %}
+                    <li class="list-group-item">
+                        <h5>{{ doctor.username }}</h5>
+                        <p>Specialty: {{ doctor.specialist }}</p>
+                        <a href="{% url 'book_appointment' %}?doctor_id={{ doctor.id }}" class="btn btn-primary">Book Appointment</a>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <div class="alert alert-warning" role="alert">
+                No doctors found for your diagnosis. Please check back later.
+            </div>
+        {% endif %}
+    {% endif %}
+</div>
+<!-- <script>
+    function sendSymptomToAI(symptom) {
+    fetch("{% url 'diagnosis' %}", {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ symptom: symptom })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.suggestion) {
+            simulateTypingEffect('Doctor AI', data.suggestion);
+            saveChatSession(symptom, data.suggestion);
+
+            // Check if doctors are available
+            if (data.doctors && data.doctors.length > 0) {
+                let doctorMessage = 'We recommend the following doctors based on your diagnosis:<br>';
+                data.doctors.forEach(doctor => {
+                    doctorMessage += `<strong>Dr. ${doctor.name}</strong> - ${doctor.specialist} <br>Location: ${doctor.location}<br><br>`;
+                });
+                addMessageToChat('Doctor AI', doctorMessage);
+            } else {
+                addMessageToChat('Doctor AI', 'No doctors found matching your diagnosis.');
+            }
+
+            if (isVoiceCommand) {
+                const utterance = new SpeechSynthesisUtterance(data.suggestion);
+                speechSynthesis.speak(utterance);
+            }
+            isVoiceCommand = false;
+        } else {
+            addMessageToChat('Doctor AI', 'No suggestion received.');
+        }
+    })
+    .catch(error => {
+        addMessageToChat('Doctor AI', 'Sorry, something went wrong. Please try again.');
+        console.error('Error with symptom submission:', error);
+    });
+}
+
+</script> -->
+{% endblock %}

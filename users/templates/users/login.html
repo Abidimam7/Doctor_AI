@@ -1,0 +1,51 @@
+<!-- users/templates/users/login.html -->
+{% extends "base.html" %}
+{% load bootstrap5 %}
+{% load widget_tweaks %}
+
+{% block title %}Login - AI Healthcare{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center align-items-center min-vh-100">
+        <div class="col-lg-6 col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h2 class="card-title text-center">LOGIN</h2>
+
+                    <form method="post">
+                        {% csrf_token %}
+                        {% if form.errors %}
+                            <div class="alert alert-danger">
+                                <ul>
+                                    {% for field in form %}
+                                        {% for error in field.errors %}
+                                            <li>{{ error }}</li>
+                                        {% endfor %}
+                                    {% endfor %}
+                                    {% for error in form.non_field_errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                        
+                        <!-- Render Django form fields without help texts -->
+                        <div class="mb-3">
+                            <label for="id_username" class="form-label">Username</label>
+                            {{ form.username|add_class:"form-control" }}
+                        </div>
+                        <div class="mb-3">
+                            <label for="id_password" class="form-label">Password</label>
+                            {{ form.password|add_class:"form-control" }}
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Login Now</button>
+                    </form>
+
+                    <p class="text-center mt-3">Don't have an account? <a href="{% url 'register' %}" class="link-primary">Register here</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

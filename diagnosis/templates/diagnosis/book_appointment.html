@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="text-center mb-4">Book an Appointment</h1>
+    
+    <!-- Card for Appointment Booking Form -->
+    <div class="card shadow-lg p-3 mb-5 bg-white rounded">
+        <div class="card-body">
+            <h5 class="card-title text-center mb-4">Appointment Details</h5>
+            <form method="POST">
+                {% csrf_token %}
+                
+                <!-- Doctor Selection -->
+                <div class="mb-3">
+                    <label for="doctor_id" class="form-label">Select Doctor</label>
+                    <select class="form-select" id="doctor_id" name="doctor_id" required>
+                        <option value="" disabled selected>Select a Doctor</option>
+                        {% for doctor in doctors %}
+                            <option value="{{ doctor.id }}">{{ doctor.username }} - {{ doctor.specialist }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Date Selection -->
+                <div class="mb-3">
+                    <label for="date" class="form-label">Select Date</label>
+                    <input type="date" class="form-control" id="date" name="date" required>
+                </div>
+                
+                <!-- Time Selection -->
+                <div class="mb-3">
+                    <label for="time" class="form-label">Select Time</label>
+                    <input type="time" class="form-control" id="time" name="time" required>
+                </div>
+                
+                <!-- Submit Button -->
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-block">Book Appointment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

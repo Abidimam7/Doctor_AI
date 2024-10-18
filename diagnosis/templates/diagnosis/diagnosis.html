@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+{% load bootstrap5 %}
+{% load widget_tweaks %}
+{% load bootstrap_icons %}
+{% block content %}
+{% load static %}
+<link rel="stylesheet" href="{% static 'css/styles.css' %}">
+
+<div class="container mt-5">
+    <h2 class="text-center">GeTWel</h2>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <button id="new-chat" class="btn btn-light">New Consultation</button>
+                    <div id="new-chat-icon" class="ml-2" title="New Chat Started" style="display: none;">
+                        <i class="fa-solid fa-stethoscope"></i>
+                    </div>
+                    <!-- Sidebar -->
+                    {% if user.is_authenticated %}
+                    {% if user.role == 'patient' %}
+                        <li class="list-group-item">
+                            <a href="{% url 'book_appointment' %}" class="btn btn-light">Book Appointment</a>
+                        </li>
+                    {% endif %}
+                        <li class="list-group-item">
+                        <a href="{% url 'patient_history' %}" class="btn btn-light">Chat History</a>
+                    </li>
+                {% endif %}
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Diagnosis Result</h5>
+                    <div class="alert alert-info" role="alert">
+                        {{ suggestion }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Recommended Doctors</h5>
+                    {% if doctors %}
+                        <div class="list-group">
+                            {% for doctor in doctors %}
+                                <div class="list-group-item">
+                                    <h5>{{ doctor.name }} - {{ doctor.specialist }}</h5>
+                                    <p>Location: {{ doctor.location }}</p>
+                                    <a href="{% url 'book_appointment' doctor.id %}" class="btn btn-primary">Book Appointment</a>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p>No doctors found for this diagnosis.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Area -->
+        <div class="col-md-8">
+            <div class="card" id="chatbox" style="padding: 20px;">
+                <div id="chat-conversation" class="mb-4" style="height: 300px; overflow-y: auto;">
+                    <!-- Chat messages will be displayed here -->
+                </div>
+
+                <form id="symptom-form" method="post" enctype="multipart/form-data" style="display: flex; margin-top: 10px; align-items: center;">
+                    {% csrf_token %}
+                    <input type="text" name="symptom" id="symptom-input" class="form-control chat-input" placeholder="Describe your symptom..." autocomplete="off">
+                    
+                    <button type="submit" class="btn send-button" title="Send">
+                        <i class="fas fa-arrow-up"></i>
+                    </button>
+                
+                    <!-- Upload Icon Button for PDF/JPG -->
+                    <label for="report-upload" class="btn btn-secondary upload-btn ml-2" title="Upload a Medical Report (PDF/JPG)">
+                        <i class="bi bi-upload"></i>
+                        <input type="file" id="report-upload" name="report" accept=".pdf, .jpg, .jpeg" style="display: none;">
+                    </label>
+                    
+                    <button id="start-voice-input" class="btn btn-secondary ml-2" title="Start Voice Input">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                
+                    <button id="stop-voice-input" class="btn btn-danger voice-btn ml-2" style="display: none; border-radius: 50%;" title="Stop Voice Input">
+                        <i class="fas fa-stop"></i>
+                    </button>                    
+
+                    <!-- Removed loading spinner -->
+                </form>
+                
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    let recognition;
+    const voiceInputBtn = document.getElementById('start-voice-input');
+    const symptomInput = document.getElementById('symptom-input');
+    let isListening = false; 
+    let isVoiceCommand = false;
+
+    // Check if the browser supports speech recognition
+    if ('webkitSpeechRecognition' in window) {
+        recognition = new webkitSpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onresult = function(event) {
+            const transcript = event.results[0][0].transcript;
+            isVoiceCommand = true;
+            addMessageToChat('You', transcript);
+            sendSymptomToAI(transcript);
+            stopVoiceInput();
+        };
+
+        recognition.onerror = function(event) {
+            console.error('Speech recognition error:', event.error);
+            addMessageToChat('System', 'There was an issue with the voice recognition. Please try again.');
+            stopVoiceInput();
+        };
+
+        recognition.onend = function() {
+            stopVoiceInput();
+        };
+    }
+
+    // Toggle voice input
+    voiceInputBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        isListening ? stopVoiceInput() : startVoiceInput();
+    });
+
+    function startVoiceInput() {
+        recognition.start();
+        voiceInputBtn.innerHTML = '<i class="fas fa-stop"></i>';
+        voiceInputBtn.classList.replace('btn-primary', 'btn-danger voice-btn ml-2');
+        isListening = true;
+    }
+
+    function stopVoiceInput() {
+        if (recognition) {
+            recognition.stop();
+            voiceInputBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+            voiceInputBtn.classList.replace('btn-danger voice-btn ml-2', 'btn-primary');
+            isListening = false;
+        }
+    }
+
+    // Function to send symptom to AI
+    function sendSymptomToAI(symptom) {
+        fetch("{% url 'diagnosis' %}", {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ symptom: symptom })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.suggestion) {
+                simulateTypingEffect('Doctor AI', data.suggestion);
+                saveChatSession(symptom, data.suggestion);
+                // Check if doctors are available
+            // if (data.doctors && data.doctors.length > 0) {
+            //     let doctorMessage = 'We recommend the following doctors based on your diagnosis:<br>';
+            //     data.doctors.forEach(doctor => {
+            //         doctorMessage += `<strong>Dr. ${doctor.name}</strong> - ${doctor.specialist} <br>Location: ${doctor.location}<br><br>`;
+            //     });
+            //     addMessageToChat('Doctor AI', doctorMessage);
+            // } else {
+            //     addMessageToChat('Doctor AI', 'No doctors found matching your diagnosis.');
+            // }
+
+                if (isVoiceCommand) {
+                    const utterance = new SpeechSynthesisUtterance(data.suggestion);
+                    speechSynthesis.speak(utterance);
+                }
+                isVoiceCommand = false;
+            } else {
+                addMessageToChat('Doctor AI', 'No suggestion received.');
+            }
+        })
+        .catch(error => {
+            addMessageToChat('Doctor AI', 'Sorry, something went wrong. Please try again.');
+            console.error('Error with symptom submission:', error);
+        });
+    }
+
+    // Function to save chat session
+    function saveChatSession(message, response) {
+        fetch("{% url 'save_chat_session' %}", {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ message: message, response: response })
+        });
+    }
+
+    // Combined function to handle chat form submission
+    document.getElementById('symptom-form').addEventListener('submit', function(e) {
+        e.preventDefault(); // Prevent default form submission
+
+        const symptom = symptomInput.value.trim(); // Get symptom input
+        const formData = new FormData(this); // Create FormData object for file upload
+
+
+        if (symptom) {
+            addMessageToChat('You', symptom); // Add user message to chat
+            sendSymptomToAI(symptom); // Send symptom to AI
+        }
+         // Check if there's a file to upload
+         const fileInput = document.getElementById('report-upload');
+        if (fileInput.files.length > 0) {
+            // Handle file upload if present
+            fetch("{% url 'upload_report' %}", {
+                method: 'POST',
+                body: formData, // Include file data in the request
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);  // Debug to check the response from the server
+                if (data.suggestion) {
+                    addMessageToChat('Doctor AI', data.suggestion); // Display AI suggestion
+                } else {
+                    addMessageToChat('Doctor AI', 'No suggestion received.');
+                }
+            })
+            .catch(error => {
+                addMessageToChat('Doctor AI', 'Sorry, something went wrong. Please try again.');
+                console.error('Error with file upload:', error);
+            });
+        }
+
+        symptomInput.value = ''; // Clear the symptom input field
+    });
+
+    // Simulate typing effect for AI response
+    function simulateTypingEffect(sender, message) {
+        const chatConversation = document.getElementById('chat-conversation');
+        let messageHtml = `<p><strong>${sender}:</strong> `;
+        chatConversation.innerHTML += messageHtml;
+        chatConversation.scrollTop = chatConversation.scrollHeight;
+
+        let index = 0;
+        const typingInterval = setInterval(() => {
+            messageHtml += message[index];
+            chatConversation.lastElementChild.innerHTML = messageHtml + '</p>'; // Update last message
+            chatConversation.scrollTop = chatConversation.scrollHeight; // Scroll down
+
+            index++;
+            if (index === message.length) {
+                clearInterval(typingInterval);
+                saveChatToSession(sender, message); // Save the message to session storage
+            }
+        }, 50); // Adjust the speed of typing simulation
+    }
+
+    // Function to add messages to the chatbox and scroll down automatically
+    function addMessageToChat(sender, message, isNew = true) {
+        const chatConversation = document.getElementById('chat-conversation');
+        const messageHtml = `<p><strong>${sender}:</strong> ${message}</p>`;
+        chatConversation.innerHTML += messageHtml;
+        chatConversation.scrollTop = chatConversation.scrollHeight; // Scroll to the latest message
+
+        // Only save the message to sessionStorage if it's new
+        if (isNew) {
+            saveChatToSession(sender, message);
+        }
+    }
+    document.getElementById('new-chat').addEventListener('click', function() {
+        // Clear chat session and UI
+        sessionStorage.removeItem('chatHistory');  
+        document.getElementById('chat-conversation').innerHTML = '';  
+
+        // Show the new chat icon
+        const newChatIcon = document.getElementById('new-chat-icon');
+        newChatIcon.style.display = 'inline-block';
+
+        // Hide the icon after a few seconds
+        setTimeout(function() {
+            newChatIcon.style.display = 'none';
+        }, 3000); // Hide the icon after 3 seconds
+    });
+    // Save each chat message to session storage with a unique timestamp
+    function saveChatToSession(sender, message) {
+        let chatHistory = JSON.parse(sessionStorage.getItem('chatHistory')) || [];
+        
+        // Add a timestamp to each message so they are unique
+        chatHistory.push({ sender: sender, message: message, timestamp: Date.now() });
+        sessionStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+    }
+
+    // On page load, restore chat from sessionStorage without duplicating the last message
+    window.addEventListener('load', function() {
+        const chatHistory = JSON.parse(sessionStorage.getItem('chatHistory')) || [];
+
+        // Render all previous messages from sessionStorage
+        chatHistory.forEach(chat => {
+            addMessageToChat(chat.sender, chat.message, false); // Add without saving again
+        });
+    });
+
+</script>
+
+<!-- <script>
+    let recognition;
+    const voiceInputBtn = document.getElementById('start-voice-input');
+    const symptomInput = document.getElementById('symptom-input');
+    let isListening = false; 
+    let isVoiceCommand = false;
+
+    // Check if the browser supports speech recognition
+    if ('webkitSpeechRecognition' in window) {
+        recognition = new webkitSpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onresult = function(event) {
+            const transcript = event.results[0][0].transcript;
+            isVoiceCommand = true;
+            addMessageToChat('You', transcript);
+            sendSymptomToAI(transcript);
+            stopVoiceInput();
+        };
+
+        recognition.onerror = function(event) {
+            console.error('Speech recognition error:', event.error);
+            addMessageToChat('System', 'There was an issue with the voice recognition. Please try again.');
+            stopVoiceInput();
+        };
+
+        recognition.onend = function() {
+            stopVoiceInput();
+        };
+    }
+
+    // Toggle voice input
+    voiceInputBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        isListening ? stopVoiceInput() : startVoiceInput();
+    });
+
+    function startVoiceInput() {
+        recognition.start();
+        voiceInputBtn.innerHTML = '<i class="fas fa-stop"></i>';
+        voiceInputBtn.classList.replace('btn-primary', 'btn-danger voice-btn ml-2');
+        isListening = true;
+    }
+
+    function stopVoiceInput() {
+        if (recognition) {
+            recognition.stop();
+            voiceInputBtn.innerHTML = '<i class="fas fa-microphone"></i>';
+            voiceInputBtn.classList.replace('btn-danger voice-btn ml-2', 'btn-primary');
+            isListening = false;
+        }
+    }
+
+    // Function to send symptom to AI
+    function sendSymptomToAI(symptom) {
+        fetch("{% url 'diagnosis' %}", {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ symptom: symptom })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.suggestion) {
+                addMessageToChat('Doctor AI', data.suggestion);
+                saveChatSession(symptom, data.suggestion);
+
+                if (isVoiceCommand) {
+                    const utterance = new SpeechSynthesisUtterance(data.suggestion);
+                    speechSynthesis.speak(utterance);
+                }
+                isVoiceCommand = false;
+            } else {
+                addMessageToChat('Doctor AI', 'No suggestion received.');
+            }
+        })
+        .catch(error => {
+            addMessageToChat('Doctor AI', 'Sorry, something went wrong. Please try again.');
+            console.error('Error with symptom submission:', error);
+        });
+    }
+     document.getElementById('new-chat').addEventListener('click', function() {
+        // Clear chat session and UI
+        sessionStorage.removeItem('chatHistory');  
+        document.getElementById('chat-conversation').innerHTML = '';  
+
+        // Show the new chat icon
+        const newChatIcon = document.getElementById('new-chat-icon');
+        newChatIcon.style.display = 'inline-block';
+
+        // Hide the icon after a few seconds
+        setTimeout(function() {
+            newChatIcon.style.display = 'none';
+        }, 3000); // Hide the icon after 3 seconds
+    });
+
+    // Function to save chat session
+    function saveChatSession(message, response) {
+        fetch("{% url 'save_chat_session' %}", {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ message: message, response: response })
+        });
+    }
+
+    // Combined function to handle chat form submission
+    document.getElementById('symptom-form').addEventListener('submit', function(e) {
+        e.preventDefault(); // Prevent default form submission
+
+        const symptom = symptomInput.value.trim(); // Get symptom input
+        const formData = new FormData(this); // Create FormData object for file upload
+
+        if (symptom) {
+            addMessageToChat('You', symptom); // Add user message to chat
+            sendSymptomToAI(symptom); // Send symptom to AI
+        }
+
+        // Check if there's a file to upload
+        const fileInput = document.getElementById('report-upload');
+        if (fileInput.files.length > 0) {
+            // Handle file upload if present
+            fetch("{% url 'upload_report' %}", {
+                method: 'POST',
+                body: formData, // Include file data in the request
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);  // Debug to check the response from the server
+                if (data.suggestion) {
+                    addMessageToChat('Doctor AI', data.suggestion); // Display AI suggestion
+                } else {
+                    addMessageToChat('Doctor AI', 'No suggestion received.');
+                }
+            })
+            .catch(error => {
+                addMessageToChat('Doctor AI', 'Sorry, something went wrong. Please try again.');
+                console.error('Error with file upload:', error);
+            });
+        }
+
+        symptomInput.value = ''; // Clear the symptom input field
+    });
+// Function to add messages to the chatbox and scroll down automatically
+function addMessageToChat(sender, message, isNew = true) {
+    const chatConversation = document.getElementById('chat-conversation');
+    const messageHtml = `<p><strong>${sender}:</strong> ${message}</p>`;
+    chatConversation.innerHTML += messageHtml;
+    chatConversation.scrollTop = chatConversation.scrollHeight; // Scroll to the latest message
+
+    // Only save the message to sessionStorage if it's new
+    if (isNew) {
+        saveChatToSession(sender, message);
+    }
+}
+
+// Save each chat message to session storage with a unique timestamp
+function saveChatToSession(sender, message) {
+    let chatHistory = JSON.parse(sessionStorage.getItem('chatHistory')) || [];
+    
+    // Add a timestamp to each message so they are unique
+    chatHistory.push({ sender: sender, message: message, timestamp: Date.now() });
+    sessionStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+}
+
+// On page load, restore chat from sessionStorage without duplicating the last message
+window.addEventListener('load', function() {
+    const chatHistory = JSON.parse(sessionStorage.getItem('chatHistory')) || [];
+    let lastMessage = ''; 
+
+    // Render all previous messages from sessionStorage
+    chatHistory.forEach(chat => {
+        addMessageToChat(chat.sender, chat.message, false); // Add without saving again
+        lastMessage = chat.message;  // Keep track of the last message
+    });
+
+    // Optional: You can also remove the last message if needed from the sessionStorage
+});
+
+</script> -->
+{% endblock %}

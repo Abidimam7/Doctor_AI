@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% load bootstrap5 %}
+
+{% block content %}
+{% load static %}
+<link rel="stylesheet" href="{% static 'css/styles.css' %}">
+<div class="container mt-5">
+  <h1 class="text-center mb-4">Doctor Dashboard</h1>
+  <div class="row">
+      <!-- Doctor's Details and About Section Combined -->
+      <div class="col-md-6">
+          <div class="card mb-4">
+              <div class="card-header text-center">
+                  <h4>Doctor's Profile</h4>
+              </div>
+              <div class="card-body">
+                  <div class="row">
+                      <!-- Doctor's Details -->
+                      <div class="col-md-6">
+                          <h5 class="mb-3">Doctor's Details</h5>
+                          <p><strong>Name:</strong> {{ doctor.first_name }} {{ doctor.last_name }}</p>
+                          <p><strong>Specialist:</strong> {{ doctor.specialist }}</p>
+                          <p><strong>Location:</strong> {{ doctor.location }}</p>
+                      </div>
+  
+                      <!-- About Section -->
+                          <div class="d-flex justify-content-between align-items-center mb-3">
+                              <h5 class="mb-0">About</h5>
+                              <button class="btn btn-sm btn-outline-primary" id="edit-about-btn" title="Edit About Section">
+                                  <i class="fas fa-edit"></i>
+                              </button>
+                          </div>
+                          <p id="about-text" class="about-text">{{ doctor.about|default:"No information provided." }}</p> <!-- Display the doctor's about section here -->
+  
+                          <form id="about-form" style="display: none;" method="post">
+                              {% csrf_token %}
+                              <div class="form-group mb-3">
+                                  <label for="about-textarea" class="form-label">Update About Section:</label>
+                                  <textarea id="about-textarea" name="about" class="form-control" rows="4">{{ doctor.about }}</textarea>
+                              </div>
+                              <div class="d-flex justify-content-end">
+                                  <button type="submit" class="btn btn-primary me-2">Save Changes</button>
+                                  <button type="button" class="btn btn-secondary" id="cancel-edit-btn">Cancel</button>
+                              </div>
+                          </form>
+                      
+                  </div>
+              </div>
+          </div>
+      </div>
+  
+ 
+    <!-- Booked Appointments Section -->
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header text-center">
+          <h4>Your Appointments (Total: {{ appointments.count }})</h4>
+        </div>
+        <div class="card-body">
+          {% if appointments %}
+            <div class="list-group">
+              {% for appointment in appointments %}
+                <div class="list-group-item">
+                  <strong>Appointment with: {{ appointment.patient.username }}</strong>
+                  <p><strong>Date:</strong> {{ appointment.date }} <strong>Time:</strong> {{ appointment.time }}</p>
+                  <p><strong>Status:</strong> <span class="text-{{ appointment.status|lower }}">{{ appointment.status }}</span></p>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="alert alert-info mt-3">
+              No appointments available.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- All Patient Diagnoses -->
+  <h2 class="mb-3">Patient Record</h2>
+
+  {% if diagnoses_by_patient %}
+    <div class="list-group">
+      {% for patient, diagnoses in diagnoses_by_patient.items %}
+        <div class="list-group-item">
+          <strong>
+            <a href="javascript:void(0);" class="toggle-details" data-target="details-{{ forloop.counter }}">
+              Name: {{ patient.username }}
+            </a>
+          </strong>
+
+          <div id="details-{{ forloop.counter }}" class="diagnosis-details" style="display: none; margin-top: 10px;">
+            <div class="card">
+              <div class="card-body">
+                <h5>Diagnosis History:</h5>
+                <ul>
+                  {% for diagnosis in diagnoses %}
+                    <li>
+                      <strong>Date:</strong> {{ diagnosis.date_created }} <br>
+                      <strong>Symptoms:</strong> {{ diagnosis.symptoms }} <br>
+                      <strong>Diagnosis:</strong> {{ diagnosis.diagnosis }}
+                    </li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="alert alert-info mt-3">
+      No diagnoses available.
+    </div>
+  {% endif %}
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const toggles = document.querySelectorAll('.toggle-details');
+      toggles.forEach(function(toggle) {
+        toggle.addEventListener('click', function() {
+          const targetId = toggle.getAttribute('data-target');
+          const targetElement = document.getElementById(targetId);
+          targetElement.style.display = targetElement.style.display === 'none' ? 'block' : 'none';
+          targetElement.style.transition = 'all 0.3s'; // Smooth transition
+        });
+      });
+    });
+      document.addEventListener('DOMContentLoaded', function() {
+          const editBtn = document.getElementById('edit-about-btn');
+          const aboutForm = document.getElementById('about-form');
+          const aboutText = document.getElementById('about-text');
+          const cancelBtn = document.getElementById('cancel-edit-btn');
+
+          // Show the edit form when the edit button is clicked
+          editBtn.addEventListener('click', function() {
+              aboutText.style.display = 'none'; // Hide current about text
+              aboutForm.style.display = 'block'; // Show edit form
+          });
+
+          // Cancel edit
+          cancelBtn.addEventListener('click', function() {
+              aboutText.style.display = 'block'; // Show current about text
+              aboutForm.style.display = 'none'; // Hide edit form
+          });
+
+          // Handle form submission
+          aboutForm.addEventListener('submit', function(event) {
+              event.preventDefault(); // Prevent default form submission
+
+              const formData = new FormData(aboutForm);
+              
+              fetch('{% url "update_about" %}', {
+                  method: 'POST',
+                  body: formData,
+                  headers: {
+                      'X-Requested-With': 'XMLHttpRequest', // Ensure the request is recognized as AJAX
+                  },
+              })
+              .then(response => response.json())
+              .then(data => {
+                  if (data.success) {
+                      aboutText.textContent = formData.get('about'); // Update the displayed about text
+                      aboutText.style.display = 'block'; // Show updated text
+                      aboutForm.style.display = 'none'; // Hide the form
+                      alert('Your About section has been updated!'); // Notify the user
+                  } else {
+                      alert('Error updating About section.'); // Handle error
+                  }
+              })
+              .catch(error => console.error('Error:', error));
+          });
+      });
+
+  </script>
+</div>
+{% endblock %}
